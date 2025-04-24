@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knock Down Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid #000;
+            margin-top: 20px;
+        }
+        #congrats {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 20px;
+            border: 2px solid #000;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #playAgain {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="Scratch.html">Book Recomendations</a>
+    <h1>Knock Down Game</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div id="congrats">
+        <h2>Congratulations!</h2>
+        <p>You won in <span id="throwsCount">0</span> throws!</p>
+        <button id="playAgain">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const congratsDiv = document.getElementById('congrats');
+        const throwsCountElement = document.getElementById('throwsCount');
+        const playAgainButton = document.getElementById('playAgain');
+
+        const groundHeight = 50;
+
+        let buildings = [];
+        const slingshot = { x: 150, y: canvas.height - groundHeight - 20, radius: 5 };
+        let ball = { x: slingshot.x, y: slingshot.y, radius: 10, dx: 0, dy: 0, isThrown: false, isDragging: false };
+        let throws = 0;
+
+        function createRandomBuildings() {
+            buildings = [];
+            const buildingCount = Math.floor(Math.random() * 5) + 3; // Random number between 3 and 7
+            for (let i = 0; i < buildingCount; i++) {
+                const width = Math.floor(Math.random() * 50) + 50;
+                const height = Math.floor(Math.random() * 100) + 50;
+                const x = Math.floor(Math.random() * (canvas.width - width - 200)) + 200;
+                const y = canvas.height - groundHeight - height;
+                buildings.push({ x, y, width, height, dx: 0, dy: 0, angle: 0, knockedDown: false });
+            }
+        }
+
+        function drawGround() {
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.fillStyle = i % 40 === 0 ? '#55AA55' : '#66BB66';
+                ctx.fillRect(i, canvas.height - groundHeight, 20, groundHeight);
+            }
+        }
+
+        function drawSlingshot() {
+            ctx.beginPath();
+            ctx.moveTo(slingshot.x - 50, slingshot.y + 20);
+            ctx.lineTo(ball.x, ball.y);
+            ctx.lineTo(slingshot.x + 50, slingshot.y + 20);
+            ctx.strokeStyle = 'brown';
+            ctx.stroke();
+            ctx.closePath();
+
+            ctx.beginPath();
+            ctx.arc(slingshot.x, slingshot.y, slingshot.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'black';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawBuildings() {
+            buildings.forEach(building => {
+                ctx.save();
+                ctx.translate(building.x + building.width / 2, building.y + building.height / 2);
+                ctx.rotate(building.angle);
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(-building.width / 2, -building.height / 2, building.width, building.height);
+                ctx.restore();
+            });
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'red';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGround();
+            drawSlingshot();
+            drawBuildings();
+            drawBall();
+        }
+
+        function isCollision(entityA, entityB) {
+            if (entityA.radius) { // Circular hitbox for the ball
+                const distX = entityA.x - (entityB.x + entityB.width / 2);
+                const distY = entityA.y - (entityB.y + entityB.height / 2);
+                const distance = Math.sqrt(distX ** 2 + distY ** 2);
+                return distance < entityA.radius + Math.max(entityB.width, entityB.height) / 2;
+            } else { // Rectangular hitbox for buildings
+                return (
+                    entityA.x < entityB.x + entityB.width &&
+                    entityA.x + entityA.width > entityB.x &&
+                    entityA.y < entityB.y + entityB.height &&
+                    entityA.y + entityA.height > entityB.y
+                );
+            }
+        }
+
+        function updatePhysics() {
+            if (ball.isThrown) {
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                ball.dy += 0.1; // gravity effect
+
+                buildings.forEach(building => {
+                    if (!building.knockedDown && isCollision(ball, building)) {
+                        building.knockedDown = true;
+                        building.angle = Math.random() * 0.5; // Random angle for falling effect
+                        building.dx = ball.dx * 0.5; // Transfer ball's momentum
+                        building.dy += 0.5;
+                    }
+
+                    if (building.knockedDown) {
+                        building.x += building.dx;
+                        building.y += building.dy;
+                        building.dy += 0.1; // Gravity for knocked-down buildings
+
+                        // Check collision with other buildings for domino effect
+                        buildings.forEach(otherBuilding => {
+                            if (otherBuilding !== building && !otherBuilding.knockedDown && isCollision(building, otherBuilding)) {
+                                otherBuilding.knockedDown = true;
+                                otherBuilding.angle = Math.random() * 0.5; // Random angle for falling effect
+                                otherBuilding.dx = building.dx * 0.5;
+                                otherBuilding.dy += 0.5;
+                            }
+                        });
+                    }
+                });
+
+                if (ball.x > canvas.width || ball.y > canvas.height || ball.x < 0 || ball.y < 0) {
+                    ball.isThrown = false;
+                    ball.x = slingshot.x;
+                    ball.y = slingshot.y;
+                }
+            }
+
+            if (buildings.every(building => building.knockedDown && building.y > canvas.height)) {
+                congratsDiv.style.display = 'block';
+                throwsCountElement.innerText = throws;
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const dist = Math.sqrt((e.offsetX - ball.x) ** 2 + (e.offsetY - ball.y) ** 2);
+            if (dist < ball.radius) {
+                ball.isDragging = true;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (ball.isDragging) {
+                ball.x = e.offsetX;
+                ball.y = e.offsetY;
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (ball.isDragging) {
+                ball.isDragging = false;
+                const angle = Math.atan2(slingshot.y - ball.y, slingshot.x - ball.x);
+                const force = Math.min(10, Math.sqrt((slingshot.x - ball.x) ** 2 + (slingshot.y - ball.y) ** 2) / 10);
+                ball.dx = Math.cos(angle) * force;
+                ball.dy = Math.sin(angle) * force;
+                ball.isThrown = true;
+                throws++;
+            }
+        });
+
+        playAgainButton.addEventListener('click', () => {
+            createRandomBuildings();
+            throws = 0;
+            ball.x = slingshot.x;
+            ball.y = slingshot.y;
+            congratsDiv.style.display = 'none';
+        });
+
+        function gameLoop() {
+            draw();
+            updatePhysics();
+            requestAnimationFrame(gameLoop);
+        }
+
+        createRandomBuildings();
+        gameLoop();
+    </script>
+</body>
+</html>
